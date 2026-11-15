@@ -27,9 +27,9 @@ jobs:
       - name: Create Yandex Games ZIP
         run: |
           mkdir -p dist
-          cp index.html yandex-sdk.js dist/
+          cp index.html yandex-sdk.js online-client.js dist/
           cd dist
-          zip -9 ../yandex-games-build.zip index.html yandex-sdk.js
+          zip -9 ../yandex-games-build.zip index.html yandex-sdk.js online-client.js
 
       - name: Upload ZIP artifact
         uses: actions/upload-artifact@v4
