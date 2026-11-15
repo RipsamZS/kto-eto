@@ -35,7 +35,7 @@ inlineScripts.forEach((match, index) => {
 if (!html.includes("onlineGame.createRoom") || !html.includes("onlineGame.joinRoom")) {
   throw new Error("Multiplayer room controls are missing");
 }
-if (!html.includes("id=\"onlineGamePanel\" style=\"display:none")) {
+if (!/id="onlineGamePanel"[^>]*style="[^"]*display:\s*none/.test(html)) {
   throw new Error("Multiplayer panel must stay hidden in single-player mode");
 }
 console.log("Yandex build validation passed.");
