@@ -47,7 +47,7 @@
     if(!pack||!Array.isArray(pack.characters)||pack.characters.length<20)return{ok:false,message:"Для онлайн-игры нужно не менее 20 персонажей."};
     const count=Number(settings.cardCount||pack.characters.length);
     if([20,30,40,50,60].indexOf(count)<0||pack.characters.length<count)return{ok:false,message:"Размер набора должен быть 20, 30, 40, 50 или 60 персонажей."};
-    const code=String(Math.floor(100000+Math.random()*900000));
+    const random=new Uint32Array(1);crypto.getRandomValues(random);const code=String(100000+(random[0]%900000));
     try{await connect(code);}catch(e){return{ok:false,message:e.message};}
     const result=await send("create-room",{pack:{name:String(pack.name||"Пак").slice(0,60),characters:pack.characters},settings:{roomName:String(settings.roomName||"Кто это?").slice(0,50),roomCode:code,maxPlayers:2,cardCount:count,timerSeconds:Number(settings.timerSeconds||0),access:"private",nickname:"Игрок"}});
     if(!result.ok){leaveRoom();return result;}
