@@ -240,7 +240,7 @@ hr{border:0;border-top:1px solid #ffffff22;margin:22px 0}
  </div>
  <div class="game-info">
   <div class="info-pill" id="gamePackLabel">Пак</div>
-<div id="onlineGamePanel" class="panel" style="max-width:900px;margin:12px auto">
+<div id="onlineGamePanel" class="panel" style="display:none;max-width:900px;margin:12px auto">
  <div id="onlineRoomCode" class="info-pill center">Онлайн-комната</div>
  <p id="onlineStatus" class="subtitle">Ожидаем подключения...</p>
  <p id="onlineTurnLabel" class="info-pill center">Ожидание соперника</p>
@@ -312,7 +312,7 @@ let currentScreenId="home";
 
 function exitGame(){
  const wasPlaying=currentScreenId==="game";
- if(onlineMode && window.onlineGame){window.onlineGame.leaveRoom();onlineMode=false;onlineReadySent=false;onlineRoomCode=null;}
+ if(onlineMode && window.onlineGame){window.onlineGame.leaveRoom();onlineMode=false;onlineReadySent=false;onlineRoomCode=null;document.getElementById("onlineGamePanel").style.display="none";}
  showScreen("home");
  if(wasPlaying) window.YandexGame?.showFullscreenAd();
 }
@@ -731,17 +731,17 @@ async function createOnlineMatch(){
  const count=[60,50,40,30,20].find(n=>source.characters.length>=n);if(!count){setOnlineLobbyStatus("Для онлайн-игры нужно минимум 20 персонажей.");return;}
  const pack={name:source.name,characters:source.characters.slice(0,count).map((c,i)=>({id:String(c.id||("character_"+i)),name:String(c.name||("Персонаж "+(i+1))).slice(0,80),emoji:c.emoji||null,image:c.image||null}))};
  const button=document.getElementById("onlineCreateRoomButton");button.disabled=true;setOnlineLobbyStatus("Создаём комнату...");
- try{const r=await window.onlineGame.createRoom(pack,{cardCount:count,roomName:"Кто это?",timerSeconds:60});if(!r.ok){setOnlineLobbyStatus(r.message||"Не удалось создать комнату.");return;}onlineMode=true;onlineReadySent=false;onlineRoomCode=r.code;startGameFromCharacters(pack.characters,pack.name+" — онлайн");document.getElementById("onlineRoomCode").textContent="Код комнаты: "+r.code;setOnlineLobbyStatus("Комната создана. Отправь код другу.");}
+ try{const r=await window.onlineGame.createRoom(pack,{cardCount:count,roomName:"Кто это?",timerSeconds:60});if(!r.ok){setOnlineLobbyStatus(r.message||"Не удалось создать комнату.");return;}onlineMode=true;onlineReadySent=false;onlineRoomCode=r.code;document.getElementById("onlineGamePanel").style.display="block";startGameFromCharacters(pack.characters,pack.name+" — онлайн");document.getElementById("onlineRoomCode").textContent="Код комнаты: "+r.code;setOnlineLobbyStatus("Комната создана. Отправь код другу.");}
  catch(e){setOnlineLobbyStatus(e.message||"Ошибка создания комнаты.");}finally{button.disabled=false;}
 }
 async function joinOnlineMatch(){
  const code=document.getElementById("onlineJoinCode").value.trim().toUpperCase();if(!/^[A-Z0-9_-]{3,16}$/.test(code)){setOnlineLobbyStatus("Введи корректный код комнаты.");return;}
  const button=document.getElementById("onlineJoinRoomButton");button.disabled=true;setOnlineLobbyStatus("Подключаемся...");
- try{const r=await window.onlineGame.joinRoom(code);if(!r.ok){setOnlineLobbyStatus(r.message||"Не удалось войти.");return;}if(!r.pack||!Array.isArray(r.pack.characters)){setOnlineLobbyStatus("Сервер не передал набор.");window.onlineGame.leaveRoom();return;}onlineMode=true;onlineReadySent=false;onlineRoomCode=code;startGameFromCharacters(r.pack.characters,r.pack.name+" — онлайн");document.getElementById("onlineRoomCode").textContent="Код комнаты: "+code;setOnlineLobbyStatus("Ты вошёл в комнату. Выбери персонажа.");}
+ try{const r=await window.onlineGame.joinRoom(code);if(!r.ok){setOnlineLobbyStatus(r.message||"Не удалось войти.");return;}if(!r.pack||!Array.isArray(r.pack.characters)){setOnlineLobbyStatus("Сервер не передал набор.");window.onlineGame.leaveRoom();return;}onlineMode=true;onlineReadySent=false;onlineRoomCode=code;document.getElementById("onlineGamePanel").style.display="block";startGameFromCharacters(r.pack.characters,r.pack.name+" — онлайн");document.getElementById("onlineRoomCode").textContent="Код комнаты: "+code;setOnlineLobbyStatus("Ты вошёл в комнату. Выбери персонажа.");}
  catch(e){setOnlineLobbyStatus(e.message||"Ошибка подключения.");}finally{button.disabled=false;}
 }
 function trySendOnlineReady(){if(!onlineMode||!secretCharacter||onlineReadySent||!window.onlineGame?.canChooseCharacter())return;onlineReadySent=true;window.onlineGame.playerReady(secretCharacter.id).then(r=>{if(!r.ok)onlineReadySent=false;const el=document.getElementById("onlineStatus");if(el)el.textContent=r.ok?"Персонаж выбран. Ожидаем соперника.":(r.message||"Ошибка выбора персонажа.");});}
-function returnToMenu(){onlineMode=false;onlineReadySent=false;onlineRoomCode=null;showScreen("home");}
+function returnToMenu(){onlineMode=false;onlineReadySent=false;onlineRoomCode=null;document.getElementById("onlineGamePanel").style.display="none";showScreen("home");}
 document.getElementById("onlineAskButton").onclick=async()=>{const input=document.getElementById("onlineQuestionInput"),q=input.value.trim();if(!q)return;const r=await window.onlineGame.askQuestion(q);if(r.ok)input.value="";else setOnlineLobbyStatus(r.message||"Ошибка отправки вопроса.");};
 document.getElementById("onlineAnswerYes").onclick=async()=>{const r=await window.onlineGame.answerQuestion(true);if(r.ok)document.getElementById("onlineQuestionPanel").style.display="none";};
 document.getElementById("onlineAnswerNo").onclick=async()=>{const r=await window.onlineGame.answerQuestion(false);if(r.ok)document.getElementById("onlineQuestionPanel").style.display="none";};
