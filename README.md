@@ -24,3 +24,6 @@ The original site, `main` branch, and Cloudflare production resources are not mo
 2. Upload the ZIP as a draft in the Yandex Games developer console.
 3. Test SDK initialization, Game Ready, gameplay start/stop, pause/resume, and ad callbacks in the Yandex debug panel.
 4. Complete the game's developer-console metadata, age rating, icon, screenshots, and moderation requirements.
+
+
+Yandex Games multiplayer build: see [YANDEX_GAMES.md](YANDEX_GAMES.md). The original `main` branch remains unchanged.
