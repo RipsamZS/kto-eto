@@ -44,6 +44,7 @@ The game still works in a regular browser if the Yandex SDK is unavailable. Play
 - Join the room from that device and confirm both players choose a secret character.
 - Test turns, questions, yes/no answers, incorrect and correct guesses, and disconnects.
 - Use packs with 20, 30, 40, 50, or 60 characters.
+- Room codes are generated with the browser's Web Crypto random number generator.
 
 ## Important scope
 
