@@ -23,7 +23,7 @@
     if (!gameplay) return;
 
     try {
-      if (gameplayWanted && !platformPaused && !adInProgress) {
+      if (gameplayWanted && !platformPaused && !document.hidden && !adInProgress) {
         gameplay.start();
       } else {
         gameplay.stop();
