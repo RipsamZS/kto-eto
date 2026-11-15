@@ -1,0 +1,39 @@
+name: Build Yandex Games ZIP
+
+on:
+  push:
+    branches:
+      - yandex-games-sdk
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Validate JavaScript and archive inputs
+        run: node scripts/validate-yandex-build.mjs
+
+      - name: Create Yandex Games ZIP
+        run: |
+          mkdir -p dist
+          cd dist
+          zip -9 ../yandex-games-build.zip ../index.html ../yandex-sdk.js
+
+      - name: Upload ZIP artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: yandex-games-build
+          path: yandex-games-build.zip
+          if-no-files-found: error
+          retention-days: 14
