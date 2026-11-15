@@ -5,6 +5,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Кто это?</title>
+<!-- Yandex Games SDK: relative path required for uploaded game archives -->
+<script src="/sdk.js"></script>
 <style>
 *{box-sizing:border-box}
 body{margin:0;min-height:100vh;color:white;font-family:Arial,sans-serif;background:linear-gradient(135deg,#17142e,#29215a,#151b3d)}
@@ -216,7 +218,7 @@ hr{border:0;border-top:1px solid #ffffff22;margin:22px 0}
 <!-- ИГРА -->
 <section id="game" class="screen">
  <div class="topbar">
-  <button class="secondary" onclick="showScreen('home')">← В меню</button>
+  <button class="secondary" onclick="exitGame()">← В меню</button>
   <h2>🎮 Кто это?</h2>
   <button class="secondary" onclick="resetCards()">↩ Вернуть все карточки</button>
  </div>
@@ -245,6 +247,49 @@ hr{border:0;border-top:1px solid #ffffff22;margin:22px 0}
   </div>
  </div>
 </div>
+
+<script>
+/* Yandex Games SDK integration. The game remains playable outside Yandex Games. */
+let ysdk = null;
+let yandexSdkPaused = false;
+let currentScreenId = "home";
+
+async function initYandexSdk() {
+  if (!window.YaGames || typeof window.YaGames.init !== "function") {
+    console.info("Yandex Games SDK is unavailable; running in standalone mode.");
+    return;
+  }
+  try {
+    ysdk = await YaGames.init();
+    ysdk.on("game_api_pause", () => {
+      yandexSdkPaused = true;
+      if (currentScreenId === "game") ysdk.features.GameplayAPI?.stop();
+    });
+    ysdk.on("game_api_resume", () => {
+      yandexSdkPaused = false;
+      if (currentScreenId === "game") ysdk.features.GameplayAPI?.start();
+    });
+    ysdk.features.LoadingAPI?.ready();
+    if (currentScreenId === "game" && !yandexSdkPaused) {
+      ysdk.features.GameplayAPI?.start();
+    }
+  } catch (error) {
+    console.warn("Yandex Games SDK initialization failed; continuing without platform features.", error);
+  }
+}
+function exitGame() {
+  const leavingGameplay = currentScreenId === "game";
+  showScreen("home");
+  if (leavingGameplay && ysdk?.adv?.showFullscreenAdv) {
+    ysdk.adv.showFullscreenAdv({
+      callbacks: {
+        onError: (error) => console.warn("Yandex fullscreen ad failed.", error)
+      }
+    });
+  }
+}
+initYandexSdk();
+</script>
 
 <script>
 const defaultCharacters=[
@@ -279,6 +324,11 @@ const demoPacks=[
 function showScreen(id){
  document.querySelectorAll(".screen").forEach(s=>s.classList.remove("active"));
  document.getElementById(id).classList.add("active");
+ currentScreenId=id;
+ if(ysdk?.features?.GameplayAPI){
+  if(id==="game" && !yandexSdkPaused) ysdk.features.GameplayAPI.start();
+  else ysdk.features.GameplayAPI.stop();
+ }
 }
 
 function persistPacks(){
