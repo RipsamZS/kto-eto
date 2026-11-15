@@ -209,7 +209,7 @@
     const player = await getPlayer({ scopes: false });
     if (!player || typeof player.setData !== "function") return false;
     try {
-      await player.setData(data);
+      await player.setData(data, true);
       return true;
     } catch (error) {
       console.warn("[Yandex Games] Could not save cloud data:", error);
