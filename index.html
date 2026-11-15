@@ -656,6 +656,7 @@ function closePicker(){
 }
 
 function chooseSecret(){
+ if(onlineMode && onlineReadySent){alert("В онлайн-матче персонаж уже подтверждён.");return;}
  openPicker();
 }
 
