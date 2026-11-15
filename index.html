@@ -144,8 +144,24 @@ hr{border:0;border-top:1px solid #ffffff22;margin:22px 0}
    <button onclick="newPack()">🎨 Создать собственный пак</button>
    <button onclick="openMyPacks()">📦 Мои паки</button>
    <button onclick="openOnlinePacks()">🌐 Онлайн паки</button>
+   <button onclick="openOnlineLobby()">🎮 Играть с другом онлайн</button>
   </div>
   <p class="note" style="margin-top:25px">Создавай свои наборы персонажей и играй с друзьями!</p>
+ </div>
+</section>
+
+<section id="onlineLobby" class="screen">
+ <div class="topbar"><button class="secondary" onclick="showScreen('home')">← Назад</button><h2>🎮 Игра с другом</h2><span></span></div>
+ <div class="panel" style="max-width:650px">
+  <p class="subtitle">Создай комнату и отправь другу код или введи его код комнаты.</p>
+  <label for="onlinePackSelect">Набор персонажей</label>
+  <select id="onlinePackSelect" style="width:100%;padding:13px;border-radius:10px;background:#211e42;color:white;margin:7px 0 15px"></select>
+  <button id="onlineCreateRoomButton" style="width:100%" onclick="createOnlineMatch()">Создать комнату</button>
+  <hr><label for="onlineJoinCode">Код комнаты друга</label>
+  <input id="onlineJoinCode" type="text" maxlength="16" placeholder="Введи код комнаты" autocomplete="off">
+  <button id="onlineJoinRoomButton" class="secondary" style="width:100%" onclick="joinOnlineMatch()">Войти в комнату</button>
+  <p id="onlineLobbyStatus" class="info-pill center" style="margin-top:18px">Подключение к серверу выполняется при создании или входе в комнату.</p>
+  <p class="note center">Для онлайн-игры нужно не менее 20 персонажей. Поддерживаемый размер поля — 20, 30, 40, 50 или 60 карточек.</p>
  </div>
 </section>
 
@@ -224,6 +240,15 @@ hr{border:0;border-top:1px solid #ffffff22;margin:22px 0}
  </div>
  <div class="game-info">
   <div class="info-pill" id="gamePackLabel">Пак</div>
+<div id="onlineGamePanel" class="panel" style="max-width:900px;margin:12px auto">
+ <div id="onlineRoomCode" class="info-pill center">Онлайн-комната</div>
+ <p id="onlineStatus" class="subtitle">Ожидаем подключения...</p>
+ <p id="onlineTurnLabel" class="info-pill center">Ожидание соперника</p>
+ <div id="onlineQuestionPanel" class="center" style="display:none;margin:12px 0"><p id="onlineQuestionText"></p><button id="onlineAnswerYes">Да</button><button id="onlineAnswerNo" class="secondary">Нет</button></div>
+ <div id="onlineAskPanel" style="display:none;margin:12px 0"><input id="onlineQuestionInput" type="text" maxlength="250" placeholder="Задай вопрос сопернику"><button id="onlineAskButton" style="width:100%">Отправить вопрос</button></div>
+ <div id="onlineGuessPanel" style="display:none;margin:12px 0"><input id="onlineGuessInput" type="text" maxlength="80" placeholder="Имя персонажа, которого хочешь угадать"><button id="onlineGuessButton" class="secondary" style="width:100%">Попробовать угадать</button></div>
+ <button id="onlineLeaveButton" class="danger" style="width:100%;margin-top:10px">Покинуть комнату</button>
+</div>
   <div class="info-pill" id="remainingLabel">Осталось: 0</div>
  </div>
  <div class="secret-box">
@@ -249,6 +274,7 @@ hr{border:0;border-top:1px solid #ffffff22;margin:22px 0}
 </div>
 
 <script src="yandex-sdk.js"></script>
+<script src="online-client.js"></script>
 
 
 
@@ -286,6 +312,7 @@ let currentScreenId="home";
 
 function exitGame(){
  const wasPlaying=currentScreenId==="game";
+ if(onlineMode && window.onlineGame){window.onlineGame.leaveRoom();onlineMode=false;onlineReadySent=false;onlineRoomCode=null;}
  showScreen("home");
  if(wasPlaying) window.YandexGame?.showFullscreenAd();
 }
@@ -616,19 +643,12 @@ function openPicker(){
 }
 
 function confirmCharacter(){
- if(!pickerSelected){
-  alert("Сначала выбери персонажа!");
-  return;
- }
-
+ if(!pickerSelected){alert("Сначала выбери персонажа!");return;}
  secretCharacter=gameCharacters.find(c=>c.id===pickerSelected);
-
  if(!secretCharacter)return;
-
  document.getElementById("characterPicker").classList.remove("active");
-
- renderGame();
- renderSecret();
+ renderGame();renderSecret();
+ if(onlineMode) trySendOnlineReady();
 }
 
 function closePicker(){
@@ -697,6 +717,46 @@ function resetCards(){
  eliminated.clear();
  renderGame();
 }
+
+let onlineMode=false,onlineReadySent=false,onlineRoomCode=null;
+function setOnlineLobbyStatus(message){const el=document.getElementById("onlineLobbyStatus");if(el)el.textContent=message;}
+function openOnlineLobby(){
+ const select=document.getElementById("onlinePackSelect");select.innerHTML="";
+ [{id:"__minecraft",name:"Minecraft",characters:defaultCharacters},...myPacks].forEach(pack=>{const o=document.createElement("option");o.value=pack.id;o.textContent=pack.name+" ("+pack.characters.length+")";select.appendChild(o);});
+ setOnlineLobbyStatus("Выбери набор и создай комнату или введи код друга.");showScreen("onlineLobby");
+}
+function getSelectedOnlinePack(){const id=document.getElementById("onlinePackSelect").value;return id==="__minecraft"?{name:"Minecraft",characters:defaultCharacters}:myPacks.find(p=>p.id===id)||null;}
+async function createOnlineMatch(){
+ const source=getSelectedOnlinePack();if(!source){setOnlineLobbyStatus("Набор не найден.");return;}
+ const count=[60,50,40,30,20].find(n=>source.characters.length>=n);if(!count){setOnlineLobbyStatus("Для онлайн-игры нужно минимум 20 персонажей.");return;}
+ const pack={name:source.name,characters:source.characters.slice(0,count).map((c,i)=>({id:String(c.id||("character_"+i)),name:String(c.name||("Персонаж "+(i+1))).slice(0,80),emoji:c.emoji||null,image:c.image||null}))};
+ const button=document.getElementById("onlineCreateRoomButton");button.disabled=true;setOnlineLobbyStatus("Создаём комнату...");
+ try{const r=await window.onlineGame.createRoom(pack,{cardCount:count,roomName:"Кто это?",timerSeconds:60});if(!r.ok){setOnlineLobbyStatus(r.message||"Не удалось создать комнату.");return;}onlineMode=true;onlineReadySent=false;onlineRoomCode=r.code;startGameFromCharacters(pack.characters,pack.name+" — онлайн");document.getElementById("onlineRoomCode").textContent="Код комнаты: "+r.code;setOnlineLobbyStatus("Комната создана. Отправь код другу.");}
+ catch(e){setOnlineLobbyStatus(e.message||"Ошибка создания комнаты.");}finally{button.disabled=false;}
+}
+async function joinOnlineMatch(){
+ const code=document.getElementById("onlineJoinCode").value.trim().toUpperCase();if(!/^[A-Z0-9_-]{3,16}$/.test(code)){setOnlineLobbyStatus("Введи корректный код комнаты.");return;}
+ const button=document.getElementById("onlineJoinRoomButton");button.disabled=true;setOnlineLobbyStatus("Подключаемся...");
+ try{const r=await window.onlineGame.joinRoom(code);if(!r.ok){setOnlineLobbyStatus(r.message||"Не удалось войти.");return;}if(!r.pack||!Array.isArray(r.pack.characters)){setOnlineLobbyStatus("Сервер не передал набор.");window.onlineGame.leaveRoom();return;}onlineMode=true;onlineReadySent=false;onlineRoomCode=code;startGameFromCharacters(r.pack.characters,r.pack.name+" — онлайн");document.getElementById("onlineRoomCode").textContent="Код комнаты: "+code;setOnlineLobbyStatus("Ты вошёл в комнату. Выбери персонажа.");}
+ catch(e){setOnlineLobbyStatus(e.message||"Ошибка подключения.");}finally{button.disabled=false;}
+}
+function trySendOnlineReady(){if(!onlineMode||!secretCharacter||onlineReadySent||!window.onlineGame?.canChooseCharacter())return;onlineReadySent=true;window.onlineGame.playerReady(secretCharacter.id).then(r=>{if(!r.ok)onlineReadySent=false;const el=document.getElementById("onlineStatus");if(el)el.textContent=r.ok?"Персонаж выбран. Ожидаем соперника.":(r.message||"Ошибка выбора персонажа.");});}
+function returnToMenu(){onlineMode=false;onlineReadySent=false;onlineRoomCode=null;showScreen("home");}
+document.getElementById("onlineAskButton").onclick=async()=>{const input=document.getElementById("onlineQuestionInput"),q=input.value.trim();if(!q)return;const r=await window.onlineGame.askQuestion(q);if(r.ok)input.value="";else setOnlineLobbyStatus(r.message||"Ошибка отправки вопроса.");};
+document.getElementById("onlineAnswerYes").onclick=async()=>{const r=await window.onlineGame.answerQuestion(true);if(r.ok)document.getElementById("onlineQuestionPanel").style.display="none";};
+document.getElementById("onlineAnswerNo").onclick=async()=>{const r=await window.onlineGame.answerQuestion(false);if(r.ok)document.getElementById("onlineQuestionPanel").style.display="none";};
+document.getElementById("onlineGuessButton").onclick=async()=>{const input=document.getElementById("onlineGuessInput"),v=input.value.trim().toLocaleLowerCase("ru").replace(/[ё]/g,"е"),c=gameCharacters.find(x=>String(x.name).toLocaleLowerCase("ru").replace(/[ё]/g,"е")===v||String(x.id)===input.value.trim());if(!c){const el=document.getElementById("onlineStatus");if(el)el.textContent="Введи точное имя персонажа из набора.";return;}const r=await window.onlineGame.makeGuess(c.id);if(r.ok)input.value="";else{const el=document.getElementById("onlineStatus");if(el)el.textContent=r.message||"Ошибка догадки.";}}
+document.getElementById("onlineLeaveButton").onclick=()=>{window.onlineGame.leaveRoom();returnToMenu();};
+document.addEventListener("online-opponent-connected",()=>{const el=document.getElementById("onlineStatus");if(el)el.textContent="Соперник подключился.";trySendOnlineReady();});
+document.addEventListener("online-opponent-ready",()=>{const el=document.getElementById("onlineStatus");if(el)el.textContent="Соперник выбрал персонажа.";});
+document.addEventListener("online-start",()=>{const el=document.getElementById("onlineStatus");if(el)el.textContent="Игра началась!";});
+document.addEventListener("online-turn",e=>{const mine=!!e.detail.isMyTurn;document.getElementById("onlineTurnLabel").textContent=mine?"Твой ход":"Ход соперника";document.getElementById("onlineAskPanel").style.display=mine?"block":"none";document.getElementById("onlineGuessPanel").style.display=mine?"block":"none";});
+document.addEventListener("online-question",e=>{document.getElementById("onlineQuestionText").textContent="Соперник спрашивает: "+e.detail.question;document.getElementById("onlineQuestionPanel").style.display="block";});
+document.addEventListener("online-answer",e=>{const el=document.getElementById("onlineStatus");if(el)el.textContent=e.detail.answer?"Соперник ответил: Да.":"Соперник ответил: Нет.";});
+document.addEventListener("online-guess-result",e=>{const el=document.getElementById("onlineStatus");if(el)el.textContent=e.detail.correct?"Ты угадал!":"Не угадал. Ход соперника.";});
+document.addEventListener("online-guess-made",e=>{const el=document.getElementById("onlineStatus");if(el)el.textContent=e.detail.correct?"Соперник угадал!":"Соперник не угадал. Твой ход.";});
+document.addEventListener("online-ended",e=>{const el=document.getElementById("onlineStatus");if(el)el.textContent=e.detail.message||"Матч завершён.";document.getElementById("onlineAskPanel").style.display="none";document.getElementById("onlineGuessPanel").style.display="none";});
+document.addEventListener("online-opponent-left",()=>{const el=document.getElementById("onlineStatus");if(el)el.textContent="Соперник отключился.";});
 
 renderMyPacks();
 window.YandexGame?.init();
