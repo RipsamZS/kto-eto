@@ -1,570 +1,87 @@
-
-let onlineSocket = io();
-
-let onlineMode = false;
-let onlineRoomCode = null;
-let onlinePack = null;
-let onlineMyTurn = false;
-let onlineWaiting = false;
-
-function addOnlineStyles() {
-    const style = document.createElement("style");
-
-    style.textContent = `
-        #onlineLobby {
-            max-width: 650px;
-            margin: 30px auto;
-            padding: 25px;
-            background: #ffffff12;
-            border-radius: 20px;
-        }
-
-        #onlineLobby input,
-        #onlineLobby select {
-            width: 100%;
-            padding: 13px;
-            margin: 8px 0 15px;
-            border-radius: 10px;
-            background: #211e42;
-            color: white;
-            border: 1px solid #777;
-        }
-
-        #onlineGamePanel {
-            max-width: 900px;
-            margin: 15px auto;
-            padding: 20px;
-            background: #ffffff15;
-            border-radius: 18px;
-        }
-
-        #onlineLog {
-            max-height: 180px;
-            overflow-y: auto;
-            margin-top: 15px;
-        }
-
-        .online-hidden {
-            display: none !important;
-        }
-    `;
-
-    document.head.appendChild(style);
-}
-
-function createOnlineInterface() {
-    addOnlineStyles();
-
-    const menu = document.querySelector(".menu-buttons");
-
-    const onlineButton = document.createElement("button");
-    onlineButton.textContent = "🌐 Играть по сети";
-    onlineButton.onclick = openOnlineLobby;
-
-    menu.appendChild(onlineButton);
-
-    const lobby = document.createElement("section");
-
-    lobby.id = "onlineLobby";
-    lobby.className = "screen";
-
-    lobby.innerHTML = `
-        <div class="topbar">
-            <button class="secondary" id="onlineBack">← Назад</button>
-            <h2>🌐 Онлайн-игра</h2>
-        </div>
-
-        <p class="subtitle">
-            Играй с другом через интернет!
-        </p>
-
-        <label>Выбери пак персонажей</label>
-        <select id="onlinePackSelect"></select>
-
-        <button id="onlineCreate" style="width:100%">
-            Создать комнату
-        </button>
-
-        <hr>
-
-        <label>Код комнаты</label>
-        <input
-            id="onlineCode"
-            type="text"
-            maxlength="6"
-            inputmode="numeric"
-            placeholder="Введи код друга"
-        >
-
-        <button id="onlineJoin" style="width:100%">
-            Войти в комнату
-        </button>
-
-        <div id="onlineStatus" class="info-pill center"
-             style="margin-top:20px">
-            Подключаемся к серверу...
-        </div>
-
-        <div id="onlineRoomInfo" class="center"
-             style="margin-top:15px"></div>
-    `;
-
-    document.body.appendChild(lobby);
-
-    document.getElementById("onlineBack").onclick = () => {
-        showScreen("home");
-    };
-
-    document.getElementById("onlineCreate").onclick =
-        createOnlineRoom;
-
-    document.getElementById("onlineJoin").onclick =
-        joinOnlineRoom;
-
-    const game = document.getElementById("game");
-
-    const panel = document.createElement("div");
-
-    panel.id = "onlineGamePanel";
-    panel.className = "online-hidden";
-
-    panel.innerHTML = `
-        <h3>🌐 Онлайн-матч</h3>
-
-        <div class="game-info">
-            <div class="info-pill" id="onlineTurn">
-                Ожидание...
-            </div>
-
-            <div class="info-pill" id="onlineOpponent">
-                Ожидаем соперника
-            </div>
-        </div>
-
-        <div id="onlineIncoming"></div>
-
-        <hr>
-
-        <input
-            id="onlineQuestion"
-            type="text"
-            placeholder="Задай вопрос сопернику"
-            style="width:100%;padding:12px;border-radius:10px"
-        >
-
-        <button id="onlineAsk" style="width:100%;margin-top:8px">
-            Задать вопрос
-        </button>
-
-        <input
-            id="onlineGuess"
-            type="text"
-            placeholder="Попробуй угадать персонажа"
-            style="width:100%;padding:12px;border-radius:10px;margin-top:12px"
-        >
-
-        <button id="onlineGuessButton"
-                class="secondary"
-                style="width:100%;margin-top:8px">
-            Угадать
-        </button>
-
-        <div id="onlineLog"></div>
-
-        <button id="onlineLeave"
-                class="danger"
-                style="width:100%;margin-top:15px">
-            Покинуть комнату
-        </button>
-    `;
-
-    game.insertBefore(panel, game.querySelector(".game-info"));
-
-    document.getElementById("onlineAsk").onclick =
-        sendOnlineQuestion;
-
-    document.getElementById("onlineGuessButton").onclick =
-        sendOnlineGuess;
-
-    document.getElementById("onlineLeave").onclick =
-        leaveOnlineGame;
-}
-
-function setOnlineStatus(message) {
-    document.getElementById("onlineStatus").textContent = message;
-}
-
-function openOnlineLobby() {
-    const select = document.getElementById("onlinePackSelect");
-
-    select.innerHTML = "";
-
-    const packs = [
-        {
-            id: "__minecraft",
-            name: "Minecraft",
-            characters: defaultCharacters
-        },
-        ...myPacks
-    ];
-
-    packs.forEach(pack => {
-        const option = document.createElement("option");
-
-        option.value = pack.id;
-        option.textContent =
-            pack.name + " (" + pack.characters.length + ")";
-
-        select.appendChild(option);
+(function () {
+  "use strict";
+  const ENDPOINT = "wss://kazo.casual-online.workers.dev";
+  const s = { socket:null, playerId:null, roomCode:null, pack:null, currentTurn:null, opponentConnected:false, readySent:false, seq:0, pending:new Map(), closing:false };
+  function emit(name, detail) { const data=detail||{}; window.dispatchEvent(new CustomEvent(name,{detail:data})); document.dispatchEvent(new CustomEvent(name,{detail:data})); }
+  function status(message) { const el=document.getElementById("onlineStatus"); if(el) el.textContent=message; }
+  function onMessage(message) {
+    if(!message||typeof message!=="object") return;
+    if(message.ackId) { const item=s.pending.get(String(message.ackId)); if(item){clearTimeout(item.timer);s.pending.delete(String(message.ackId));item.resolve(message.result||{ok:false,message:"Пустой ответ сервера."});} return; }
+    const d=message.data||{};
+    switch(message.event) {
+      case "connected": s.playerId=d.playerId||null; break;
+      case "player-joined": s.opponentConnected=true; emit("online-opponent-connected",d); status("Соперник подключился. Выберите персонажей."); break;
+      case "player-ready": emit("online-opponent-ready",d); status("Соперник выбрал персонажа."); break;
+      case "online-start": emit("online-start",d); status("Оба игрока готовы. Игра началась!"); break;
+      case "online-turn": s.currentTurn=d.currentTurn||null; emit("online-turn",{currentTurn:s.currentTurn,isMyTurn:s.currentTurn===s.playerId,deadline:d.deadline||null,timerSeconds:d.timerSeconds||0}); break;
+      case "online-question": emit("online-question",d); status("Соперник задал вопрос. Ответь на него."); break;
+      case "online-answer": emit("online-answer",d); status(d.answer?"Соперник ответил: Да.":"Соперник ответил: Нет."); break;
+      case "online-guess-result": emit("online-guess-result",d); break;
+      case "online-guess-made": emit("online-guess-made",d); break;
+      case "online-ended": s.currentTurn=null; emit("online-ended",d); status(d.message||"Матч завершён."); break;
+      case "player-left": s.opponentConnected=false; s.currentTurn=null; emit("online-opponent-left",d); status("Соперник отключился."); break;
+      default: emit("online-server-event",{event:message.event,data:d});
+    }
+  }
+  function connect(code) {
+    if(s.socket){s.closing=true;try{s.socket.close();}catch(e){}}
+    s.playerId=null;s.currentTurn=null;s.opponentConnected=false;s.readySent=false;s.roomCode=code;s.closing=false;
+    return new Promise((resolve,reject)=>{
+      let settled=false,socket;
+      const timeout=setTimeout(()=>{if(!settled){settled=true;reject(new Error("Время подключения истекло."));try{socket.close();}catch(e){}}},12000);
+      try{socket=new WebSocket(ENDPOINT+"/room?id="+encodeURIComponent(code)+"&game=who-is-it");}
+      catch(e){clearTimeout(timeout);reject(e);return;}
+      s.socket=socket;
+      socket.addEventListener("message",event=>{let message;try{message=JSON.parse(event.data);}catch(e){return;}onMessage(message);if(message.event==="connected"&&message.data&&message.data.playerId&&!settled){settled=true;clearTimeout(timeout);resolve(message.data);}});
+      socket.addEventListener("error",()=>{if(!settled){settled=true;clearTimeout(timeout);reject(new Error("Не удалось подключиться к серверу."));}});
+      socket.addEventListener("close",()=>{if(!settled){settled=true;clearTimeout(timeout);reject(new Error("Соединение было закрыто."));}if(!s.closing&&s.socket===socket){s.currentTurn=null;s.opponentConnected=false;emit("online-disconnected",{});status("Соединение с комнатой потеряно.");}});
     });
-
-    document.getElementById("onlineRoomInfo").textContent = "";
-
-    showScreen("onlineLobby");
-
-    if (onlineSocket.connected) {
-        setOnlineStatus("Подключено к серверу!");
-    } else {
-        setOnlineStatus("Подключаемся к серверу...");
-    }
-}
-
-function getOnlinePack() {
-    const id = document.getElementById("onlinePackSelect").value;
-
-    const pack = id === "__minecraft"
-        ? {
-            name: "Minecraft",
-            characters: defaultCharacters
-        }
-        : myPacks.find(p => p.id === id);
-
-    if (!pack) return null;
-
-    return {
-        name: pack.name,
-        characters: pack.characters.map(c => ({
-            id: c.id,
-            name: c.name,
-            emoji: c.emoji || null,
-            image: c.image || null
-        }))
-    };
-}
-
-function createOnlineRoom() {
-    const pack = getOnlinePack();
-
-    if (!pack || pack.characters.length < 2) {
-        alert("В паке должно быть хотя бы два персонажа.");
-        return;
-    }
-
-    if (!onlineSocket.connected) {
-        setOnlineStatus("Нет подключения к серверу.");
-        return;
-    }
-
-    onlineSocket.emit("create-room", pack, result => {
-        if (!result || !result.ok) {
-            setOnlineStatus(result?.message || "Ошибка создания комнаты.");
-            return;
-        }
-
-        onlinePack = pack;
-        onlineRoomCode = result.code;
-        onlineMode = true;
-
-        document.getElementById("onlineCode").value = result.code;
-
-        document.getElementById("onlineRoomInfo").innerHTML =
-            "<h2>Код комнаты: " + result.code + "</h2>" +
-            "<p>Отправь этот код другу. Ждём подключения...</p>";
-
-        setOnlineStatus("Комната создана!");
-    });
-}
-
-function joinOnlineRoom() {
-    const code = document.getElementById("onlineCode").value.trim();
-
-    if (!/^\d{6}$/.test(code)) {
-        alert("Введи шестизначный код.");
-        return;
-    }
-
-    onlineSocket.emit("join-room", code, result => {
-        if (!result || !result.ok) {
-            setOnlineStatus(result?.message || "Не удалось войти.");
-            return;
-        }
-
-        onlineRoomCode = code;
-        onlinePack = result.pack;
-        onlineMode = true;
-
-        setOnlineStatus("Ты подключился к комнате!");
-
-        startOnlineGame(onlinePack);
-    });
-}
-
-function startOnlineGame(pack) {
-    if (!pack || !pack.characters || !pack.characters.length) {
-        setOnlineStatus("Не удалось загрузить пак.");
-        return;
-    }
-
-    onlinePack = pack;
-
-    document.getElementById("onlineGamePanel")
-        .classList.remove("online-hidden");
-
-    document.getElementById("onlineOpponent").textContent =
-        "Соперник подключён";
-
-    document.getElementById("onlineLog").innerHTML = "";
-
-    startGameFromCharacters(
-        pack.characters,
-        pack.name + " — онлайн"
-    );
-}
-
-function onlineLog(message) {
-    const box = document.getElementById("onlineLog");
-
-    const line = document.createElement("p");
-    line.textContent = message;
-
-    box.appendChild(line);
-    box.scrollTop = box.scrollHeight;
-}
-
-function updateOnlineTurn(myTurn) {
-    onlineMyTurn = myTurn;
-
-    document.getElementById("onlineTurn").textContent =
-        myTurn ? "Твой ход" : "Ход соперника";
-
-    document.getElementById("onlineQuestion").disabled =
-        !myTurn;
-
-    document.getElementById("onlineAsk").disabled =
-        !myTurn;
-
-    document.getElementById("onlineGuess").disabled =
-        !myTurn;
-
-    document.getElementById("onlineGuessButton").disabled =
-        !myTurn;
-}
-
-function sendOnlineQuestion() {
-    const input = document.getElementById("onlineQuestion");
-    const question = input.value.trim();
-
-    if (!question || !onlineMyTurn || onlineWaiting) return;
-
-    onlineSocket.emit("ask-question", question, result => {
-        if (!result || !result.ok) {
-            onlineLog(result?.message || "Ошибка отправки вопроса.");
-            return;
-        }
-
-        onlineWaiting = true;
-        input.value = "";
-        onlineLog("Ты спросил: " + question);
-    });
-}
-
-function sendOnlineGuess() {
-    const input = document.getElementById("onlineGuess");
-    const guess = input.value.trim();
-
-    if (!guess || !onlineMyTurn || onlineWaiting) return;
-
-    onlineSocket.emit("make-guess", guess, result => {
-        if (!result || !result.ok) {
-            onlineLog(result?.message || "Ошибка отправки догадки.");
-            return;
-        }
-
-        onlineWaiting = true;
-        input.value = "";
-        onlineLog("Твоя догадка: " + guess);
-    });
-}
-
-function showOnlineAnswerButtons(type, text) {
-    const box = document.getElementById("onlineIncoming");
-
-    box.innerHTML = "";
-
-    const title = document.createElement("p");
-    title.textContent = text;
-
-    const yes = document.createElement("button");
-    yes.textContent = type === "guess" ? "Да, угадал!" : "Да";
-
-    const no = document.createElement("button");
-    no.textContent = "Нет";
-    no.className = "secondary";
-
-    yes.onclick = () => {
-        if (type === "guess") {
-            onlineSocket.emit("answer-guess", true);
-        } else {
-            onlineSocket.emit("answer-question", true);
-        }
-
-        box.innerHTML = "";
-    };
-
-    no.onclick = () => {
-        if (type === "guess") {
-            onlineSocket.emit("answer-guess", false);
-        } else {
-            onlineSocket.emit("answer-question", false);
-        }
-
-        box.innerHTML = "";
-    };
-
-    box.append(title, yes, no);
-}
-
-function leaveOnlineGame() {
-    if (onlineSocket.connected) {
-        onlineSocket.emit("leave-room");
-    }
-
-    onlineMode = false;
-    onlineRoomCode = null;
-    onlinePack = null;
-    onlineWaiting = false;
-
-    document.getElementById("onlineGamePanel")
-        .classList.add("online-hidden");
-
-    showScreen("home");
-}
-
-// СОБЫТИЯ СЕРВЕРА
-
-onlineSocket.on("connect", () => {
-    const status = document.getElementById("onlineStatus");
-
-    if (status) {
-        status.textContent = "Подключено к серверу!";
-    }
-});
-
-onlineSocket.on("connect_error", () => {
-    const status = document.getElementById("onlineStatus");
-
-    if (status) {
-        status.textContent = "Не удалось подключиться к серверу.";
-    }
-});
-
-onlineSocket.on("player-joined", () => {
-    document.getElementById("onlineOpponent").textContent =
-        "Друг подключился!";
-
-    onlineLog("Друг подключился к комнате.");
-
-    if (onlinePack) {
-        startOnlineGame(onlinePack);
-    }
-});
-
-onlineSocket.on("player-ready", () => {
-    document.getElementById("onlineOpponent").textContent =
-        "Соперник выбрал персонажа.";
-
-    onlineLog("Соперник готов к игре.");
-});
-
-onlineSocket.on("online-start", () => {
-    onlineLog("Игра началась!");
-
-    updateOnlineTurn(
-        onlineSocket.id === onlineCurrentTurn
-    );
-});
-
-let onlineCurrentTurn = null;
-
-onlineSocket.on("online-turn", data => {
-    onlineCurrentTurn = data.currentTurn;
-
-    updateOnlineTurn(
-        onlineSocket.id === onlineCurrentTurn
-    );
-
-    onlineWaiting = false;
-});
-
-onlineSocket.on("online-question", data => {
-    onlineLog("Вопрос соперника: " + data.question);
-
-    showOnlineAnswerButtons(
-        "question",
-        "Соперник спрашивает: " + data.question
-    );
-});
-
-onlineSocket.on("online-answer", data => {
-    onlineWaiting = false;
-
-    onlineLog(
-        "Ответ соперника: " + (data.answer ? "Да" : "Нет")
-    );
-});
-
-onlineSocket.on("online-guess", data => {
-    showOnlineAnswerButtons(
-        "guess",
-        "Соперник пытается угадать: " + data.guess
-    );
-});
-
-onlineSocket.on("online-guess-result", data => {
-    onlineWaiting = false;
-
-    onlineLog(
-        data.correct
-            ? "Соперник угадал!"
-            : "Соперник не угадал."
-    );
-});
-
-onlineSocket.on("online-ended", data => {
-    onlineLog(data.message);
-    alert(data.message);
-});
-
-onlineSocket.on("player-left", () => {
-    document.getElementById("onlineOpponent").textContent =
-        "Соперник отключился";
-
-    onlineLog("Соперник покинул комнату.");
-});
-
-// Подключаем подтверждение выбора персонажа к онлайн-режиму.
-const oldConfirmCharacter = confirmCharacter;
-
-confirmCharacter = function() {
-    oldConfirmCharacter();
-
-    if (!onlineMode || !secretCharacter) return;
-
-    onlineSocket.emit("player-ready", result => {
-        if (!result || !result.ok) {
-            onlineLog(result?.message || "Не удалось начать игру.");
-        }
-    });
-};
-
-createOnlineInterface();
+  }
+  function send(event,data) {
+    if(!s.socket||s.socket.readyState!==WebSocket.OPEN)return Promise.resolve({ok:false,message:"Нет соединения с комнатой."});
+    const id=String(++s.seq);
+    return new Promise(resolve=>{const timer=setTimeout(()=>{s.pending.delete(id);resolve({ok:false,message:"Сервер не ответил вовремя."});},12000);s.pending.set(id,{resolve,timer});try{s.socket.send(JSON.stringify({event,data:data||{},requestId:id}));}catch(e){clearTimeout(timer);s.pending.delete(id);resolve({ok:false,message:"Не удалось отправить запрос."});}});
+  }
+  async function createRoom(pack,settings) {
+    settings=settings||{};
+    if(!pack||!Array.isArray(pack.characters)||pack.characters.length<20)return{ok:false,message:"Для онлайн-игры нужно не менее 20 персонажей."};
+    const count=Number(settings.cardCount||pack.characters.length);
+    if([20,30,40,50,60].indexOf(count)<0||pack.characters.length<count)return{ok:false,message:"Размер набора должен быть 20, 30, 40, 50 или 60 персонажей."};
+    const code=String(Math.floor(100000+Math.random()*900000));
+    try{await connect(code);}catch(e){return{ok:false,message:e.message};}
+    const result=await send("create-room",{pack:{name:String(pack.name||"Пак").slice(0,60),characters:pack.characters},settings:{roomName:String(settings.roomName||"Кто это?").slice(0,50),roomCode:code,maxPlayers:2,cardCount:count,timerSeconds:Number(settings.timerSeconds||0),access:"private",nickname:"Игрок"}});
+    if(!result.ok){leaveRoom();return result;}
+    s.pack=pack;window.onlineRoomActive=true;emit("online-room-created",{code,settings:result.settings||{}});
+    return{ok:true,code,pack,settings:result.settings||{}};
+  }
+  async function joinRoom(code) {
+    code=String(code||"").trim().toUpperCase();
+    if(!/^[A-Z0-9_-]{3,16}$/.test(code))return{ok:false,message:"Неверный код комнаты."};
+    try{await connect(code);}catch(e){return{ok:false,message:e.message};}
+    const result=await send("join-room",{profile:{nickname:"Игрок",avatar:"🙂"}});
+    if(!result.ok){leaveRoom();return result;}
+    s.pack=result.pack||null;s.opponentConnected=true;window.onlineRoomActive=true;emit("online-room-joined",{code,settings:result.settings||{}});
+    return{ok:true,code,pack:result.pack,settings:result.settings||{}};
+  }
+  function playerReady(id) {
+    if(!s.opponentConnected)return Promise.resolve({ok:false,message:"Подожди подключения соперника."});
+    return send("player-ready",{secretCharacterId:String(id)}).then(result=>{if(result.ok)s.readySent=true;return result;});
+  }
+  function leaveRoom() {
+    const socket=s.socket;s.closing=true;
+    if(socket&&socket.readyState===WebSocket.OPEN){try{socket.send(JSON.stringify({event:"leave-room",data:{}}));}catch(e){}}
+    if(socket){try{socket.close();}catch(e){}}
+    s.socket=null;s.playerId=null;s.roomCode=null;s.pack=null;s.currentTurn=null;s.opponentConnected=false;s.readySent=false;
+    for(const item of s.pending.values()){clearTimeout(item.timer);item.resolve({ok:false,message:"Комната закрыта."});}
+    s.pending.clear();window.onlineRoomActive=false;emit("online-room-left",{});
+  }
+  window.onlineGame={
+    createRoom,joinRoom,playerReady,leaveRoom,
+    canChooseCharacter:()=>Boolean(s.socket&&s.socket.readyState===WebSocket.OPEN&&s.opponentConnected&&!s.readySent),
+    isMyTurn:()=>Boolean(s.playerId&&s.currentTurn===s.playerId),
+    askQuestion:question=>send("ask-question",{question:String(question||"").trim()}),
+    answerQuestion:answer=>send("answer-question",{answer:Boolean(answer)}),
+    makeGuess:guessId=>send("make-guess",{guessId:String(guessId||"")}),
+    getRoomCode:()=>s.roomCode,getPack:()=>s.pack
+  };
+})();
