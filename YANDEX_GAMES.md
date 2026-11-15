@@ -6,6 +6,7 @@ This branch is a separate Yandex Games build. The original `main` branch and the
 
 - `index.html` — game interface and game logic.
 - `yandex-sdk.js` — isolated adapter for the Yandex Games SDK.
+- `online-client.js` — WebSocket multiplayer client for the existing Cloudflare Durable Object server.
 - `/sdk.js` — loaded from the Yandex platform; do not download or commit this file.
 
 ## SDK integration
@@ -37,6 +38,13 @@ The game still works in a regular browser if the Yandex SDK is unavailable. Play
 - Fullscreen ads close correctly and return control to the game/menu.
 - The game still opens if SDK initialization or an ad request fails.
 
+## Multiplayer test checklist
+
+- Create a room and share its code with a second device.
+- Join the room from that device and confirm both players choose a secret character.
+- Test turns, questions, yes/no answers, incorrect and correct guesses, and disconnects.
+- Use packs with 20, 30, 40, 50, or 60 characters.
+
 ## Important scope
 
-This branch contains the SDK adapter only. It does not change Cloudflare Workers, the production server, the main website, or the `main` branch. Online multiplayer/server endpoints and any missing runtime assets must be checked separately before calling the ZIP a complete publishable build.
+This branch connects to the existing Cloudflare Worker. It does not deploy or modify the production Worker, the main website, or the `main` branch. Complete the two-device multiplayer test and Yandex debug-panel checks before submitting for moderation.
